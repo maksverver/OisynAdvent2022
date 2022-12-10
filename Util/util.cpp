@@ -82,7 +82,7 @@ bool MemoryMappedFile::Open(const std::filesystem::path &path)
 	void *data = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
 	close(fd);
 	if (data == MAP_FAILED) return false;
-	if (m_pData != nullptr) munmap((void*) m_pData, size);
+	if (m_pData != nullptr) munmap((void*) m_pData, m_size);
 	m_pData = data;
 	m_size = size;
 #endif
