@@ -1,6 +1,7 @@
 import core;
 import util;
 using namespace util;
+#include <immintrin.h>
 
 enum MoveDir : char
 {
@@ -171,7 +172,7 @@ private:
 };
 
 
-bool Run(const wchar_t* file)
+bool Run(const std::filesystem::path &file)
 {
 	Timer total(AutoStart);
 	Timer tload(AutoStart);
@@ -192,7 +193,7 @@ bool Run(const wchar_t* file)
 	constexpr int NumKnots = 9;
 	int x = 0, y = 0;
 	int knotStates[NumKnots] = { };
-	std::ranges::fill(knotStates, 4);
+	std::fill(std::begin(knotStates), std::end(knotStates), 4);
 	//int minx = 0, miny = 0, maxx = 0, maxy = 0;
 
 	BitGrid grid;
@@ -228,7 +229,7 @@ bool Run(const wchar_t* file)
 
 			//coords.emplace_back((ullong(y) << 32) | (uint)x);
 			//coords.emplace_back(x, y);
-			
+
 			numCells += grid.Set(x, y);
 		}
 	}
@@ -240,32 +241,36 @@ bool Run(const wchar_t* file)
 	tsort.Stop();
 
 	total.Stop();
-	std::cout << std::format(std::locale(""), "Time: {:L}us (load:{}us, sim:{:L}us, sort:{:L}us)\n{}\n", total.GetTime(), tload.GetTime(), tsimulate.GetTime(), tsort.GetTime(), numCells);
+	std::cout << "Time: " << total.GetTime() << "us (load:" << tload.GetTime() << "us, sim:" << tsimulate.GetTime() << "us, sort:" << tsort.GetTime() << "us)\n" << numCells << "\n";
 	//std::cout << std::format("({}, {}) - ({}, {})\n", minx, miny, maxx, maxy);
 
 	return true;
 }
 
 
-int main()
+int main(int argc, char* argv[])
 {
-	const wchar_t* inputs[] =
+	const char* inputs[] =
 	{
-		//L"example.txt",
-		//L"example-2.txt",
-		L"input.txt",
-		L"aoc_2022_day09_large-1.txt",
-		L"aoc_2022_day09_large-2.txt",
+		//"example.txt",
+		//"example-2.txt",
+		"input.txt",
+		"aoc_2022_day09_large-1.txt",
+		"aoc_2022_day09_large-2.txt",
 	};
+	const char **const_argv = const_cast<const char**>(argv);
+	const char **inputs_begin = argc > 1 ? &const_argv[1] : std::begin(inputs);
+	const char **inputs_end = argc > 1 ? &const_argv[argc] : std::end(inputs);
 
 	constexpr int NumRuns = 1;
-	for (auto f : inputs)
+	for (const char **input = inputs_begin; input != inputs_end; ++input)
 	{
-		std::wcout << std::format(L"\n===[ {} ]==========\n", f);
+		std::filesystem::path f(*input);
+		std::cout << "\n===[ " << f << " ]==========\n";
 		for (int i = 0; i < NumRuns; i++)
 		{
 			if (!Run(f))
-				std::wcerr << std::format(L"Can't open `{}`\n", f);
+				std::cerr << "Can't open `" << f << "`\n";
 		}
 	}
 }

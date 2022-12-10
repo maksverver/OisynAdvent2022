@@ -1,9 +1,11 @@
 import core;
 import util;
 using namespace util;
+#include <immintrin.h>
 
 int findchar(const char* ptr, char c)
 {
+#ifdef __AVX512F__
 	auto allC = _mm256_set1_epi8(c);
 	constexpr uint RegSize = sizeof(allC);
 
@@ -13,6 +15,9 @@ int findchar(const char* ptr, char c)
 		if (uint mvmask = _mm256_movemask_epi8(chars))
 			return std::countr_zero(mvmask) + offset;
 	}
+#else
+	return strchr(ptr, c) - ptr;
+#endif
 }
 
 std::pair<long long, bool> GetScoreAndVisibility(const char* data, const char* tdata, int x, int y, int width, int height, int stride, int tstride)
@@ -212,7 +217,7 @@ void Transpose2(char* out, const char* in, int width, int height)
 			int y = nexty.fetch_add(8);
 			if (y >= height)
 				return;
-			 
+
 			auto loadmask = _mm256_loadu_epi32(mask + 8 - std::min(height - y, 8));
 
 			for (int x = 0; x < width; x += 4)

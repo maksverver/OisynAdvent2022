@@ -1,4 +1,7 @@
-#include "pch.h"
+import core;
+import util;
+using namespace util;
+#include <immintrin.h>
 
 #define CV_ENABLE		0	// whether the concurrency visualizer code is enabled
 
@@ -32,18 +35,16 @@ union delayed_span
 #endif
 
 
-using uint = unsigned int;
-using ullong = unsigned long long;
 static constexpr size_t RegSize = sizeof(__m256i);
 
-static const alignas(16) unsigned char s_mask[48] = {
+alignas(16) static const unsigned char s_mask[48] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
-static const alignas(16) uint s_mul[32] = { 1'000'000'000, 100'000'000, 10'000'000, 1'000'000, 100'000, 10'000, 1'000, 100, 10, 1 };
+alignas(16) static const uint s_mul[32] = { 1'000'000'000, 100'000'000, 10'000'000, 1'000'000, 100'000, 10'000, 1'000, 100, 10, 1 };
 
-static const alignas(16) unsigned char s_masks[8][16] = {
+alignas(16) static const unsigned char s_masks[8][16] = {
 	{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
 	{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
 	{ 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
@@ -94,24 +95,19 @@ uint conv_2(__m256i v)
 	return r;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+	if (argc < 2) return (std::cerr << "Missing filename argument.\n", 1);
+	std::filesystem::path file = argv[1];
+
 	auto start = std::chrono::high_resolution_clock::now();
 
 	CV_SPAN_START(init, L"init");
 
-	const wchar_t* file = L"input.txt"; // L"aoc_2022_day01_large_input.txt";
-	HANDLE hFile = CreateFile(file, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-	if (hFile == INVALID_HANDLE_VALUE)
-		return (std::wcerr << "Can't open file `" << file << "`\n"), 1;
-	ullong fileSize = 0;
-	GetFileSizeEx(hFile, (LARGE_INTEGER*)&fileSize);
-
-	HANDLE hMap = CreateFileMapping(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
-	if (hMap == INVALID_HANDLE_VALUE)
-		return (std::cerr << "Error creating file mapping\n"), 1;
-
-	const char* basePtr = (const char*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
+	MemoryMappedFile mmap;
+	if (!mmap.Open(file)) return (std::cerr << "Unable to open " << argv[1] << '\n', 1);
+	const size_t fileSize = mmap.size_bytes();
+	const char* const basePtr = mmap.data<char>();
 
 	CV_SPAN_STOP(init);
 	CV_SPAN_START(work, "Work");
@@ -198,7 +194,7 @@ int main()
 	};
 
 
-	std::vector<std::jthread> threads;
+	std::vector<std::thread> threads;
 	std::array<uint, 3> grandTotals = { };
 	threads.reserve(numThreads);
 	for (int n = 0; n < numThreads; n++)
@@ -224,8 +220,8 @@ int main()
 	auto d = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
 	CV_SPAN_STOP(work);
 
-	std::cout << std::format("Time: {} us\n", d);
+	std::cout << "Time: " << d << " us\n";
 
-	std::cout << std::format("Max: {}\n", grandTotals[0]);
-	std::cout << std::format("Top 3: {} ({}, {}, {})\n", grandTotals[0] + grandTotals[1] + grandTotals[2], grandTotals[0], grandTotals[1], grandTotals[2]);
+	std::cout << "Max: " << grandTotals[0] << "\n";
+	std::cout << "Top 3: " << grandTotals[0] + grandTotals[1] + grandTotals[2] << " (" << grandTotals[0] << ", " << grandTotals[1] << ", " << grandTotals[2] << ")\n";
 }

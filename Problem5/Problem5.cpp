@@ -1,3 +1,8 @@
+import core;
+import util;
+using namespace util;
+#include <immintrin.h>
+
 #define CV_ENABLE		0	// whether the concurrency visualizer code is enabled
 
 #if CV_ENABLE
@@ -35,52 +40,19 @@ union delayed_span
 
 #endif
 
-
-using uint = unsigned int;
-using ullong = unsigned long long;
 static constexpr size_t RegSize = sizeof(__m256i);
 
-uint conv(const char* str, int size)
-{
-	__assume(size >= 0 && size <= 8);
-	int sizeBits = size * 8;
-
-	ullong l = *(const ullong*)str;
-	l ^= 0x30303030'30303030;
-	l <<= 64 - sizeBits;
-
-	__m128i v8 = _mm_cvtsi64_si128(l);
-	__m256i v = _mm256_cvtepu8_epi32(v8); // 8x 32 bit digits
-	v = _mm256_mullo_epi32(v, _mm256_setr_epi32(10'000'000, 1'000'000, 100'000, 10'000, 1'000, 100, 10, 1));
-	v = _mm256_hadd_epi32(v, v); // 4 combined numbers
-	v = _mm256_hadd_epi32(v, v); // 2 combined numbers
-	uint r =  _mm_cvtsi128_si32(_mm_add_epi32(_mm256_extracti128_si256(v, 0), _mm256_extracti128_si256(v, 1)));
-	return r;
-}
-
-uint conv(const char* str, const char* end)
-{
-	return conv(str, int(end - str));
-}
-
-int main()
+int main(int argc, char *argv[])
 {
 	CV_SPAN_START(init, L"Init");
 	auto start = std::chrono::high_resolution_clock::now();
 
-	auto filename = L"aoc_2022_day05_large_input-3.txt";
-	HANDLE hFile = CreateFile(filename, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-	if (hFile == INVALID_HANDLE_VALUE)
-		return (std::wcerr << std::format(L"Can't open file `{}`\n", filename)), 1;
-	ullong fileSize = 0;
-	GetFileSizeEx(hFile, (LARGE_INTEGER*)&fileSize);
-
-	HANDLE hMap = CreateFileMapping(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
-	if (hMap == INVALID_HANDLE_VALUE)
-		return (std::cerr << "Error creating file mapping\n"), 1;
-
-	const char* basePtr = (const char*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
-	const char* endPtr = basePtr + fileSize;
+	std::filesystem::path filename = argc > 1 ? argv[1] : "aoc_2022_day05_large_input-3.txt";
+	MemoryMappedFile mmap;
+	if (!mmap.Open(filename))
+		return (std::cerr << "Can't open file `" << filename << "`\n"), 1;
+	const char* basePtr = mmap.data<char>();
+	const char* endPtr = basePtr + mmap.size<char>();
 
 	std::vector<std::span<const char>> stateLines;
 	stateLines.reserve(10000);
@@ -108,7 +80,7 @@ int main()
 	CV_SPAN_STOP(state);
 
 	std::vector<int> stackStart(numStacks);
-	std::jthread findStackStarts([&, numStacks]
+	std::thread findStackStarts([&, numStacks]
 	{
 		CV_SCOPED_SPAN(L"find stack starts");
 		for (int i = 0; i < numStacks; i++)
@@ -132,7 +104,7 @@ int main()
 
 	struct Move { int n, from, to; };
 	std::vector<Move> threadMoves[MaxThreads];
-	std::vector<std::jthread> threads;
+	std::vector<std::thread> threads;
 	threads.reserve(numThreads);
 
 	for (int threadIdx = numThreads - 1; threadIdx >= 0; threadIdx--)
@@ -188,7 +160,7 @@ int main()
 				if (c_end[-1] == '\n')
 					c_end--;
 
-				mymoves.emplace_back(conv(a, a_end), conv(b, b_end) - 1, conv(c, c_end) - 1);
+				mymoves.push_back(Move{(int) conv(a, a_end), (int) conv(b, b_end) - 1, (int) conv(c, c_end) - 1});
 			}
 
 			threadMoves[idx] = std::move(mymoves);
@@ -203,15 +175,16 @@ int main()
 	for (int i = 0; i < numStacks; i++)
 	{
 		stacks[i].reserve(1000);
-		stacks[i].emplace_back(0, i);
+		stacks[i].push_back({0, i});
 	}
 
 	for (int threadIdx = numThreads - 1; threadIdx >= 0; threadIdx--)
 	{
 		threads[threadIdx].join();
 		auto& moves = threadMoves[threadIdx];
-		for (auto [n, to, from] : std::ranges::reverse_view(moves))
+		for (auto it = moves.rbegin(); it != moves.rend(); ++it)
 		{
+			auto [n, to, from] = *it;
 			auto& src = stacks[from];
 			auto& dest = stacks[to];
 
@@ -229,7 +202,7 @@ int main()
 					if (n)
 					{
 						n--;
-						dest.emplace_back(0, srcPile.column);
+						dest.emplace_back(Pile{0, srcPile.column});
 						src.pop_back();
 					}
 				}
@@ -250,7 +223,7 @@ int main()
 					if (n)
 					{
 						n--;
-						dest.emplace_back(0, srcPile.column);
+						dest.emplace_back(Pile{0, srcPile.column});
 						src.pop_back();
 					}
 				}
@@ -266,8 +239,9 @@ int main()
 	{
 		auto& s = stacks[i];
 		int top = stackStart[i];
-		for (auto& p : std::ranges::reverse_view(s))
+		for (auto it = s.rbegin(); it != s.rend(); ++i)
 		{
+			auto &p = *it;
 			top += p.junk;
 			result[p.column] = stateLines[top][i * 4 + 1];
 			top++;
@@ -276,6 +250,6 @@ int main()
 	CV_SPAN_STOP(result);
 
 	auto d = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
-	std::cout << std::format("Time: {} us\n", d);
+	std::cout << "Time: " << d << " us\n";
 	std::cout << result.data() << std::endl;
 }

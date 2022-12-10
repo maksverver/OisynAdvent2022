@@ -1,13 +1,16 @@
 module;
 
+#ifdef _WIN32
 #pragma warning(disable:4005)
 #pragma warning(disable:5106)
 #define WINDOWS_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
-#include <immintrin.h>
+#endif
 
 export module util;
+
+#include <immintrin.h>
 
 import core;
 
@@ -19,6 +22,13 @@ using ushort = unsigned short;
 using uint = unsigned;
 using ullong = unsigned long long;
 
+#ifndef _MSC_VER
+__attribute__((always_inline))
+inline void __assume(bool x) {
+	return __builtin_assume(x);
+}
+#endif
+
 }
 
 export namespace util
@@ -28,28 +38,33 @@ class MemoryMappedFile
 {
 public:
 	MemoryMappedFile();
-	MemoryMappedFile(const wchar_t* path);
+	MemoryMappedFile(const std::filesystem::path &path);
 	MemoryMappedFile(MemoryMappedFile&& other);
 	~MemoryMappedFile();
 
 	MemoryMappedFile& operator=(MemoryMappedFile&& other);
 
-	bool Open(const wchar_t* path);
+	bool Open(const std::filesystem::path &path);
 	void Close();
 	bool IsOpen() const { return m_pData != nullptr; }
 	ullong GetSize() const { return m_size; }
 	explicit operator bool() const { return IsOpen(); }
 
 	template<class T>
-	std::span<T> GetSpan() const { return std::span<T>((T*)m_pData, (T*)m_pData + (m_size + sizeof(T) - 1) / sizeof(T)); }
+	std::span<T> GetSpan() const { return std::span<T>(data<T>(), data<T>() + size<T>()); }
+
+	size_t size_bytes() const { return m_size; }
+	template<class T> const T *data() const { return (const T*)m_pData; }
+	template<class T> size_t size() const { return (m_size + sizeof(T) - 1) / sizeof(T); }
 
 private:
+#ifdef _WIN32
 	HANDLE m_hFile = INVALID_HANDLE_VALUE;
 	HANDLE m_hMap = INVALID_HANDLE_VALUE;
+#endif
 	ullong m_size = 0;
 	const void* m_pData = nullptr;
 };
-
 
 inline constexpr int MaxThreads = 32;
 
@@ -225,6 +240,7 @@ private:
 	int m_bufferPos = 0;
 };
 
+#ifdef __AVX512F__
 std::vector<std::span<const char>> split(std::span<const char> data, char separator, size_t expected = 10000)
 {
 	std::vector<std::span<const char>> r;
@@ -251,5 +267,6 @@ std::vector<std::span<const char>> split(std::span<const char> data, char separa
 
 	return r;
 }
+#endif
 
 }

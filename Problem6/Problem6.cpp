@@ -21,14 +21,14 @@ uint GetStart(std::span<const char> data)
 	return ~0u; // bad input!
 }
 
-int main()
+int main(int argc, char *argv[])
 {
 	Timer timer(AutoStart);
 
-	auto filename = L"input.txt";
+	const char *filename = argc > 1 ? argv[1] : "input.txt";
 	MemoryMappedFile mmap(filename);
 	if (!mmap)
-		return (std::wcerr << std::format(L"Can't open {}\n", filename)), 1;
+		return (std::cerr << "Can't open " << filename << "\n", 1);
 
 	auto fileSize = mmap.GetSize();
 	auto data = mmap.GetSpan<const char>();
@@ -59,7 +59,7 @@ int main()
 	}
 
 	timer.Stop();
-	std::cout << std::format("Time: {} us\n", timer.GetTime());
+	std::cout << "Time: " << timer.GetTime() << " us\n";
 	std::cout << result << std::endl;
 	std::cout << std::string_view{ basePtr + result - 14, basePtr + result } << "\n";
 }

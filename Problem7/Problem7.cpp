@@ -1,24 +1,28 @@
 import core;
 import util;
 using namespace util;
-
+#include <immintrin.h>
 
 int findchar(const char* ptr, char c)
 {
+#ifdef __AVX512F__
 	auto s = _mm256_loadu_epi8(ptr);
 	auto chars = _mm256_cmpeq_epi8(s, _mm256_set1_epi8(c));
 	uint mvmask = _mm256_movemask_epi8(chars);
 	if (!mvmask)
 		return 0x4000'0000;
 	return std::countr_zero(mvmask);
+#else
+	return strchr(ptr, c) - ptr;
+#endif
 }
 
 
-bool run(const wchar_t* file)
+bool run(const std::filesystem::path &file)
 {
 	MemoryMappedFile mmap(file);
 	if (!mmap)
-		return (std::wcerr << std::format(L"Error opening `{}`\n", file)), false;
+		return (std::cerr << "Error opening `" << file << "`\n"), false;
 
 	Timer t(AutoStart);
 	Timer parse(AutoStart);
@@ -100,14 +104,20 @@ bool run(const wchar_t* file)
 	}
 
 	t.Stop();
-	std::wcout << std::format(L"==[ {} ]==========\nTime: {}us (Parse: {}us)\n{}\n{}\n\n", file, t.GetTime(), parse.GetTime(), r1, r2);
+	std::cout << L"==[ " << file << " ]==========\nTime: " << t.GetTime() << "us (Parse: " << parse.GetTime() << "us)\n" << r1 << "\n" << r2 << "\n\n";
 	return true;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
-	run(L"input.txt");
-	run(L"aoc_2022_day07_deep.txt");
-	run(L"aoc_2022_day07_deep-2.txt");
-	run(L"aoc_2022_day07_large.txt");
+	if (argc <= 1) {
+		run(L"input.txt");
+		run(L"aoc_2022_day07_deep.txt");
+		run(L"aoc_2022_day07_deep-2.txt");
+		run(L"aoc_2022_day07_large.txt");
+	} else {
+		for (int i = 1; i < argc; ++i) {
+			run(argv[i]);
+		}
+	}
 }
