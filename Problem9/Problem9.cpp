@@ -151,7 +151,7 @@ public:
 
 	BitGrid()
 	{
-		std::ranges::fill(m_pageCache, std::pair{ 1ull, nullptr });
+		std::fill(std::begin(m_pageCache), std::end(m_pageCache), std::pair{ 1ull, nullptr });
 	}
 
 	bool Set(int x, int y)
