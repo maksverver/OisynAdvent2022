@@ -3,7 +3,7 @@ import util;
 using namespace util;
 #include <immintrin.h>
 
-enum MoveDir : char
+enum MoveDir : uchar
 {
 	UpLeft,
 	Up,
@@ -21,8 +21,9 @@ constexpr MoveDir DirFromDeltas(int dx, int dy)
 	return (MoveDir)(dy * 3 + dx + 4);
 }
 
-constexpr std::pair<int, int> DeltasFromDir(int dir)
+constexpr std::pair<char, char> DeltasFromDir(int dir)
 {
+	__assume(dir >= UpLeft && dir <= DownRight);
 	return { dir % 3 - 1, dir / 3 - 1 };
 }
 
@@ -39,10 +40,10 @@ constexpr std::array<MoveDir, 256> DirLookup = GenerateDirLookup();
 
 struct Move
 {
-	char nextState;
-	char dx;
-	char dy;
-	char moveDir;
+	uint nextState : 16;
+	uint moveDir : 8;
+	int dx : 4;
+	int dy : 4;
 };
 
 constexpr int Sign(int i)
@@ -50,9 +51,12 @@ constexpr int Sign(int i)
 	return i < 0 ? -1 : i > 0 ? 1 : 0;
 }
 
+template<int N>
+using StateArray = std::array<std::array<Move, 9>, N>;
+
 constexpr auto GenerateStates()
 {
-	std::array<std::array<Move, 9>, 9> s{};
+	StateArray<9> s{};
 
 	for (int old = 0; old < 9; old++)
 	{
@@ -79,14 +83,44 @@ constexpr auto GenerateStates()
 			}
 
 			int newStateIdx = DirFromDeltas(nx, ny);
-			s[old][n] = { char(newStateIdx), char(dx), char(dy), DirFromDeltas(dx, dy) };
+			s[old][n] = { uint(newStateIdx), uint(DirFromDeltas(dx, dy)), dx, dy };
 		}
 	}
 
 	return s;
 }
-constexpr std::array<std::array<Move, 9>, 9> States = GenerateStates();
+constexpr StateArray<9> States = GenerateStates();
 
+template<int A, int B>
+constexpr auto CombineStates(StateArray<A> a, StateArray<B> b)
+{
+	StateArray<A * B> result;
+
+	for (int i = 0; i < A; i++)
+	{
+		for (int j = 0; j < B; j++)
+		{
+			for (int d = 0; d < 9; d++)
+			{
+				auto move = a[i][d];
+				auto newa = move.nextState;
+				auto newd = move.moveDir;
+
+				move = b[j][newd];				
+				auto newb = move.nextState;
+
+				move.nextState = newa * B + newb;
+				result[i * B + j][d] = move;
+			}
+		}
+	}
+
+	return result;
+}
+constexpr auto DoubleStates = CombineStates(States, States);
+constexpr auto TripleStates = CombineStates(DoubleStates, States);
+//constexpr auto QuadStates = CombineStates(DoubleStates, DoubleStates);
+//constexpr auto PentaStates = CombineStates(QuadStates, States);
 
 
 
@@ -194,12 +228,10 @@ bool Run(const std::filesystem::path &file)
 	GenerateStates();
 
 	Timer tsimulate(AutoStart);
-	std::vector<ullong> coords;
-	constexpr int NumKnots = 9;
+	constexpr int NumKnotStates = 3;
+	int knotStates[NumKnotStates] = { };
+	std::fill(std::begin(knotStates), std::end(knotStates), (int)TripleStates.size() / 2);	// middle state is always fully overlapping for all knots
 	int x = 0, y = 0;
-	int knotStates[NumKnots] = { };
-	std::fill(std::begin(knotStates), std::end(knotStates), 4);
-	//int minx = 0, miny = 0, maxx = 0, maxy = 0;
 
 	BitGrid grid;
 	int numCells = 1;
@@ -214,31 +246,39 @@ bool Run(const std::filesystem::path &file)
 		ptr += n + 1;
 
 		MoveDir dir = DirLookup[d & 0xff];
+		//int minnum = std::min(num, 20);
+		Move lastMove;
 		for (int i = 0; i < num; i++)
 		{
-			int d = dir;
-			Move lastMove;
-			for (int k = 0; k < NumKnots /*&& d != None*/; k++)
-			{
-				auto& state = knotStates[k];
-				lastMove = States[state][d];
-				state = lastMove.nextState;
-				d = lastMove.moveDir;
-			}
+			lastMove = TripleStates[knotStates[0]][dir];
+			knotStates[0] = lastMove.nextState;
+			auto d = lastMove.moveDir;
+			if (d == None)
+				continue;
 
-			if (d != None)
-			{
-				x += lastMove.dx;
-				y += lastMove.dy;
-				numCells += grid.Set(x, y);
-			}
+			lastMove = TripleStates[knotStates[1]][d];
+			knotStates[1] = lastMove.nextState;
+			d = lastMove.moveDir;
+			if (d == None)
+				continue;
 
-			//minx = std::min(minx, x);
-			//miny = std::min(miny, y);
-			//maxx = std::max(maxx, x);
-			//maxy = std::max(maxy, y);
-			//std::cout << std::format("({}, {})\n", x, y);
+			lastMove = TripleStates[knotStates[2]][d];
+			knotStates[2] = lastMove.nextState;
+			d = lastMove.moveDir;
+			if (d == None)
+				continue;
+
+			x += lastMove.dx;
+			y += lastMove.dy;
+			numCells += grid.Set(x, y);
+
 		}
+		//for (int i = minnum; i < num; i++)
+		//{
+		//	x += lastMove.dx;
+		//	y += lastMove.dy;
+		//	numCells += grid.Set(x, y);
+		//}
 	}
 	tsimulate.Stop();
 
@@ -264,7 +304,7 @@ int main(int argc, char* argv[])
 	const char **inputs_begin = argc > 1 ? &const_argv[1] : std::begin(inputs);
 	const char **inputs_end = argc > 1 ? &const_argv[argc] : std::end(inputs);
 
-	constexpr int NumRuns = 1;
+	constexpr int NumRuns = 10;
 	for (const char **input = inputs_begin; input != inputs_end; ++input)
 	{
 		std::filesystem::path f(*input);

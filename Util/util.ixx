@@ -24,7 +24,7 @@ using ullong = unsigned long long;
 
 #ifndef _MSC_VER
 __attribute__((always_inline))
-inline void __assume(bool x) {
+inline constexpr void __assume(bool x) {
 	return __builtin_assume(x);
 }
 #endif
