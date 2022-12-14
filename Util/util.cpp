@@ -29,9 +29,9 @@ MemoryMappedFile::MemoryMappedFile()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
-MemoryMappedFile::MemoryMappedFile(const std::filesystem::path &path)
+MemoryMappedFile::MemoryMappedFile(const std::filesystem::path &path, bool copyOnWrite)
 {
-	Open(path);
+	Open(path, copyOnWrite);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -60,7 +60,7 @@ MemoryMappedFile& MemoryMappedFile::operator=(MemoryMappedFile&& other)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
-bool MemoryMappedFile::Open(const std::filesystem::path &path)
+bool MemoryMappedFile::Open(const std::filesystem::path &path, bool copyOnWrite)
 {
 #ifdef _WIN32
 	m_hFile = CreateFileW(path.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
@@ -68,18 +68,20 @@ bool MemoryMappedFile::Open(const std::filesystem::path &path)
 		return false;
 	GetFileSizeEx(m_hFile, (LARGE_INTEGER*)&m_size);
 
-	m_hMap = CreateFileMapping(m_hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
+	m_hMap = CreateFileMapping(m_hFile, nullptr, copyOnWrite ? PAGE_WRITECOPY : PAGE_READONLY, 0, 0, nullptr);
 	if (m_hMap == INVALID_HANDLE_VALUE)
 		return false;
 
-	m_pData = MapViewOfFile(m_hMap, FILE_MAP_READ, 0, 0, 0);
+	m_pData = MapViewOfFile(m_hMap, copyOnWrite ? FILE_MAP_COPY : FILE_MAP_READ, 0, 0, 0);
 #else
 	std::error_code ec;
 	size_t size = std::filesystem::file_size(path, ec);
 	if (size == -1) return false;
-	int fd = open(path.c_str(), O_RDONLY);
+	int fd = open(path.c_str(), O_RDONLY, 0);
 	if (fd == -1) return false;
-	void *data = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
+	int prot = PROT_READ | (copyOnWrite ? PROT_WRITE : 0);
+	int flags = copyOnWrite ? MAP_PRIVATE : MAP_SHARED;
+	void *data = mmap(nullptr, size, prot, flags, fd, 0);
 	close(fd);
 	if (data == MAP_FAILED) return false;
 	if (m_pData != nullptr) munmap((void*) m_pData, m_size);

@@ -38,13 +38,13 @@ class MemoryMappedFile
 {
 public:
 	MemoryMappedFile();
-	MemoryMappedFile(const std::filesystem::path &path);
+	MemoryMappedFile(const std::filesystem::path &path, bool copyOnWrite = false);
 	MemoryMappedFile(MemoryMappedFile&& other);
 	~MemoryMappedFile();
 
 	MemoryMappedFile& operator=(MemoryMappedFile&& other);
 
-	bool Open(const std::filesystem::path &path);
+	bool Open(const std::filesystem::path &path, bool copyOnWrite = false);
 	void Close();
 	bool IsOpen() const { return m_pData != nullptr; }
 	ullong GetSize() const { return m_size; }
@@ -63,7 +63,7 @@ private:
 	HANDLE m_hMap = INVALID_HANDLE_VALUE;
 #endif
 	ullong m_size = 0;
-	const void* m_pData = nullptr;
+	void* m_pData = nullptr;
 };
 
 inline constexpr int MaxThreads = 32;

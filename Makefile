@@ -6,7 +6,8 @@ UTIL_PCMS=build/core.pcm build/util.pcm
 UTIL_OBJS=build/util.o
 
 # Doesn't compile without AVX512: problem1 problem5 problem8
-PROBLEMS=problem6 problem7 problem9
+# Not tried to port yet: problem12
+PROBLEMS=problem6 problem7 problem9 problem13
 
 
 all: $(addprefix output/,$(PROBLEMS))
@@ -25,6 +26,7 @@ build/Problem6.o: Problem6/Problem6.cpp $(UTIL_PCMS); $(COMPILE_MODULE) $< -o $@
 build/Problem7.o: Problem7/Problem7.cpp $(UTIL_PCMS); $(COMPILE_MODULE) $< -o $@
 build/Problem8.o: Problem8/Problem8.cpp $(UTIL_PCMS); $(COMPILE_MODULE) $< -o $@
 build/Problem9.o: Problem9/Problem9.cpp $(UTIL_PCMS); $(COMPILE_MODULE) $< -o $@
+build/Problem13.o: Problem13/Problem13.cpp $(UTIL_PCMS); $(COMPILE_MODULE) $< -o $@
 
 output/problem%: build/Problem%.o $(UTIL_OBJS); $(LINK) $< $(UTIL_OBJS) -o $@
 
